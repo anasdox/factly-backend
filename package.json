@@ -1,0 +1,29 @@
+{
+  "name": "factly-backend",
+  "version": "1.0.0",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "ts-node src/index.ts",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@keyv/sqlite": "^3.6.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/keyv": "^4.2.0",
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "keyv": "^4.5.4",
+    "keyv-jetpack": "^0.1.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.8"
+  }
+}
