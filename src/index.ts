@@ -18,19 +18,24 @@ app.use(bodyParser.json());
 app.use(cors());
 
 // Define API endpoints
-app.post('/sessions', async (req, res) => {
-  const sessionId = await createSession(req.body);
-  res.send({ sessionId });
+app.post('/rooms', async (req, res) => {
+  const roomId = await createRoom(req.body);
+  res.send({ roomId });
 });
 
-app.get('/sessions/:id', async (req, res) => {
-  const session = await getSession(req.params.id);
-  res.send(session);
+app.get('/rooms/:id', async (req, res) => {
+  const room = await getRoom(req.params.id);
+  res.send(room);
+});
+
+app.delete('/rooms/:id', async (req, res) => {
+  await stopRoom(req.params.id);
+  res.sendStatus(204);
 });
 
 app.get('/status', (req, res) => {
-  res.send(Array.from(subscribers.entries()).reduce((prev: any, [sessionId, sockets]) => {
-    prev[sessionId] = sockets.size;
+  res.send(Array.from(subscribers.entries()).reduce((prev: any, [roomId, sockets]) => {
+    prev[roomId] = sockets.size;
     return prev;
   }, {}));
 });
@@ -43,46 +48,53 @@ interface UserSocket extends Socket {
 const subscribers: Map<string, Set<UserSocket>> = new Map();
 const users: Map<string, Set<string>> = new Map();
 
-server.on('connection', (socket: UserSocket, req: { url: string; }) => {
-  console.log(`Client connected to SSE server`);
-  const sessionId = req.url?.split('/')[2];
+app.get('/events/:roomId', (req, res) => {
+  const roomId = req.params.roomId;
   const username = getUsernameFromQueryParams(req.url);
 
-  // Add client to subscribers list
-  if (!subscribers.has(sessionId)) {
-    subscribers.set(sessionId, new Set());
+  if (!subscribers.has(roomId)) {
+    subscribers.set(roomId, new Set());
   }
-  subscribers.get(sessionId)?.add(socket);
 
-  // Handle incoming data
-  socket.on('data', (data) => {
-    const message = JSON.parse(data.toString());
-
-    switch (message.type) {
-      case 'init':
-        if (username) {
-          users.get(sessionId)?.add(username);
-          socket.username = username;
-        }
-        break;
-      case 'update':
-        broadcastUpdate(sessionId, message.payload, socket.username);
-        break;
-      default:
-        console.log(`Unknown message type received: ${message.type}`);
-    }
+  // Configure headers for Server-Sent Events
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
   });
 
-  // Handle client disconnects
-  socket.on('close', () => {
-    console.log(`Client disconnected from SSE server`);
-    subscribers.get(sessionId)?.delete(socket);
+  // Add the socket to the subscribers list and handle incoming data/disconnects
+  server.on('connection', (socket: UserSocket) => {
+    socket.on('data', (data) => {
+      const message = JSON.parse(data.toString());
 
-    if (socket.username) {
-      users.get(sessionId)?.delete(socket.username);
-    }
+      switch (message.type) {
+        case 'init':
+          if (username) {
+            users.get(roomId)?.add(username);
+            socket.username = username;
+          }
+          break;
+        case 'update':
+          broadcastUpdate(roomId, message.payload, socket.username);
+          break;
+        default:
+          console.log(`Unknown message type received: ${message.type}`);
+      }
+    });
+
+    // Handle client disconnects
+    socket.on('close', () => {
+      subscribers.get(roomId)?.delete(socket);
+
+      if (socket.username) {
+        users.get(roomId)?.delete(socket.username);
+      }
+    });
   });
 });
+
 
 // Get username from query parameters
 function getUsernameFromQueryParams(url: string): string | null {
@@ -91,29 +103,35 @@ function getUsernameFromQueryParams(url: string): string | null {
 }
 
 // Implement CRUD operations for data storage
-async function createSession(data: any): Promise<string> {
-  // Create a new session with the provided data and store it in the database
-  const sessionId = uuid();
-  await saveSession(sessionId, data);
-  return sessionId;
+async function createRoom(data: any): Promise<string> {
+  // Create a new room with the provided data and store it in the database
+  const roomId = uuid();
+  await saveRoom(roomId, data);
+  return roomId;
 }
 
-async function getSession(id: string): Promise<any> {
-  // Retrieve the current state of a session by ID from the database
-  const session = await loadSession(id);
-  return session;
+async function getRoom(id: string): Promise<any> {
+  // Retrieve the current state of a room by ID from the database
+  const room = await loadRoom(id);
+  return room;
 }
 
-async function saveSession(id: string, data: any) {
+async function saveRoom(id: string, data: any) {
   await store.set(id, data);
 }
 
-async function loadSession(id: string) {
+async function loadRoom(id: string) {
   return await store.get(id);
 }
 
-function broadcastUpdate(sessionId: string, payload: any, username?: string) {
-  const sockets = subscribers.get(sessionId);
+async function stopRoom(id: string) {
+  subscribers.delete(id);
+  users.delete(id);
+  await store.clear();
+}
+
+function broadcastUpdate(roomId: string, payload: any, username?: string) {
+  const sockets = subscribers.get(roomId);
   if (sockets) {
     for (const socket of sockets) {
       // Send update to all clients except the one who sent the update

@@ -1,61 +1,50 @@
-Collaborative Sessions Application
-==================================
+ Factly Backend
+=============
 
-This is a simple server-side application for managing collaborative sessions with real-time updates using Server-Sent Events (SSE) without managing conflicts. The application allows users to create and join sessions, and see updates from other users in real-time.
-
-Prerequisites
--------------
-
-* Node.js installed on your system
-* A package manager like npm or yarn
+Factly is a web tool designed for extracting actionable insights from various types of inputs using the FIR approach (Facts => Insights => Recommendations). The backend of Factly is built with Node.js and Express.js, and it utilizes several libraries such as Keyv for data storage and Server-Sent Events for real-time updates.
 
 Getting Started
 ---------------
 
+To run the Factly backend, make sure you have Node.js installed on your system. Then, follow these steps:
+
 1. Clone this repository to your local machine.
-2. Run `npm install` or `yarn install` in the project directory to install dependencies.
-3. Create a `.env` file in the project root and add the following environment variables:
-   ```
-   PORT=3000
-   DATA_DIR=./data
-   ```
-4. Run `npm start` or `yarn start` in the project directory to start the server. The server will listen on port 3000 by default.
+2. Run `npm install` in the project directory to install all dependencies.
+3. Run `npm start` to start the server. The server will listen on port 3000 by default.
 
 API Endpoints
 -------------
 
-* `POST /sessions`: Create a new collaborative session with the provided data and store it in the database. Returns the ID of the newly created session.
-* `GET /sessions/:id`: Retrieve the current state of a session by ID from the database.
-* `GET /status`: Get the status of all sessions, including the number of connected clients for each session.
+- **POST /rooms** - Create a new room with the provided data and store it in the database. Returns the room ID.
+- **GET /rooms/:id** - Retrieve the current state of a room by ID from the database.
+- **DELETE /rooms/:id** - Stop a room, clear its contents from the database, and remove all subscribers.
+- **GET /status** - Get real-time information about the number of connected clients in each active room.
 
-Server-Sent Events (SSE)
-------------------------
+Server-Sent Events Server
+-------------------------
 
-The application uses Server-Sent Events (SSE) to broadcast real-time updates to all connected clients in a collaborative session. To connect to an SSE endpoint, use a URL like `http://localhost:3000/events/{sessionId}?username={username}`. Replace `{sessionId}` with the ID of the session you want to join, and `{username}` with a simple username for the client.
+The Factly backend includes an implementation for Server-Sent Events (SSE), enabling real-time updates for users connected to a room. To use SSE, follow these steps:
 
-When a client connects to an SSE endpoint, it sends an "init" message with its username to the server. The server then adds the client to the list of connected clients for that session, and broadcasts updates from other clients to this client using the Server-Sent Events protocol.
+1. Connect to the desired room by visiting `/events/:roomId` in your browser or using an HTTP client that supports Server-Sent Events (e.g., `curl --get "http://localhost:3000/events/<ROOM_ID>"`).
+2. Provide a username as a query parameter, for example, `?username=JohnDoe`.
+3. The server will establish a Server-Sent Events connection, allowing you to receive real-time updates from the room.
 
-Implementation Details
-----------------------
+Data Storage
+------------
 
-The application uses the following technologies:
+Factly uses Keyv as its primary storage solution, with a Jetpack file system store for persisting data between server restarts. The CRUD operations (create, read, update, and delete) are implemented using Keyv's API.
 
-* Express.js for handling HTTP requests and serving static files
-* Body-parser for parsing JSON request bodies
-* CORS for enabling Cross-Origin Resource Sharing
-* Keyv with Jetpack store for storing session data in a local directory
-* Server-Sent Events for real-time updates
+Running Tests
+-------------
 
-Limitations and Future Work
----------------------------
+To run tests for the Factly backend, execute `npm test` in the project directory.
 
-This is a simple example application, and there are many ways it could be improved or extended. Some possible areas of improvement include:
+Contributing
+------------
 
-* Adding authentication and authorization to the API endpoints
-* Implementing a WebSocket-based protocol for real-time updates instead of Server-Sent Events
-* Adding support for more complex data models and collaboration scenarios
+Pull requests are welcome! For major changes, please open an issue first to discuss the proposed modifications.
 
 License
 -------
 
-This application is released under the MIT License. See the `LICENSE` file for details.
+This project is licensed under the MIT License - see the [LICENSE.md](https://github.com/anasdox/factly-backend/blob/main/LICENSE) file for details.
