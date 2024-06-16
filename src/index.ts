@@ -1,8 +1,7 @@
 import express from 'express';
 import bodyParser from 'body-parser';
 import cors from 'cors';
-import { Server } from 'http';
-import { Socket } from 'net';
+import { Response } from 'express';
 import { v4 as uuid } from 'uuid';
 import Keyv from 'keyv';
 import { KeyvFsStore } from 'keyv-jetpack';
@@ -10,8 +9,7 @@ import { KeyvFsStore } from 'keyv-jetpack';
 const store = new Keyv({ store: new KeyvFsStore() });
 
 const app = express();
-const port = 3000;
-const server = new Server(app);
+const port = process.env.PORT || 3000;
 
 // Add middleware
 app.use(bodyParser.json());
@@ -33,6 +31,17 @@ app.delete('/rooms/:id', async (req, res) => {
   res.sendStatus(204);
 });
 
+app.post('/rooms/:id/data', async (req, res) => {
+  console.log('/rooms/:id/data');
+  const roomId = req.params.id;
+  const { data, username } = req.body;
+  await saveRoom(roomId, data);
+  broadcastUpdate(roomId, data, username);
+  res.sendStatus(200);
+});
+
+
+
 app.get('/status', (req, res) => {
   res.send(Array.from(subscribers.entries()).reduce((prev: any, [roomId, sockets]) => {
     prev[roomId] = sockets.size;
@@ -41,7 +50,7 @@ app.get('/status', (req, res) => {
 });
 
 // Define Server-Sent Events server
-interface UserSocket extends Socket {
+interface UserSocket extends Response {
   username?: string;
 }
 
@@ -56,6 +65,11 @@ app.get('/events/:roomId', (req, res) => {
     subscribers.set(roomId, new Set());
   }
 
+  if (!users.has(roomId)) {
+    users.set(roomId, new Set());
+  }
+
+
   // Configure headers for Server-Sent Events
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -64,34 +78,20 @@ app.get('/events/:roomId', (req, res) => {
     'Access-Control-Allow-Origin': '*',
   });
 
-  // Add the socket to the subscribers list and handle incoming data/disconnects
-  server.on('connection', (socket: UserSocket) => {
-    socket.on('data', (data) => {
-      const message = JSON.parse(data.toString());
+  const sockets = subscribers.get(roomId) as Set<UserSocket>;
+  sockets.add(res);
 
-      switch (message.type) {
-        case 'init':
-          if (username) {
-            users.get(roomId)?.add(username);
-            socket.username = username;
-          }
-          break;
-        case 'update':
-          broadcastUpdate(roomId, message.payload, socket.username);
-          break;
-        default:
-          console.log(`Unknown message type received: ${message.type}`);
-      }
-    });
+  if (username) {
+    (users.get(roomId) as Set<string>).add(username);
+    (res as unknown as UserSocket).username = username;
+  }
 
-    // Handle client disconnects
-    socket.on('close', () => {
-      subscribers.get(roomId)?.delete(socket);
-
-      if (socket.username) {
-        users.get(roomId)?.delete(socket.username);
-      }
-    });
+  // Handle client disconnects
+  req.on('close', () => {
+    sockets.delete(res);
+    if (username) {
+      (users.get(roomId) as Set<string>).delete(username);
+    }
   });
 });
 
@@ -99,7 +99,10 @@ app.get('/events/:roomId', (req, res) => {
 // Get username from query parameters
 function getUsernameFromQueryParams(url: string): string | null {
   const urlParts = new URLSearchParams(url.split('?')[1]);
-  return urlParts.get('username');
+  const username = urlParts.get('username');
+  console.log(`processed url: ${url}`);
+  console.log(`Parsed username: ${username}`);
+  return username;
 }
 
 // Implement CRUD operations for data storage
@@ -127,16 +130,19 @@ async function loadRoom(id: string) {
 async function stopRoom(id: string) {
   subscribers.delete(id);
   users.delete(id);
-  await store.clear();
+  await store.delete(id)
 }
 
-function broadcastUpdate(roomId: string, payload: any, username?: string) {
+function broadcastUpdate(roomId: string, payload: any, username: string) {
   const sockets = subscribers.get(roomId);
   if (sockets) {
     for (const socket of sockets) {
       // Send update to all clients except the one who sent the update
+      console.log('emitter username :'+ username);
+    
       if (socket.username !== username) {
-        socket.write(`data: ${JSON.stringify({ type: 'update', payload })}\n\n`);
+        console.log('boardcast to '+ socket.username);
+        socket.write(`data: ${JSON.stringify({ type: 'update', payload , username})}\n\n`);
       }
     }
   }
